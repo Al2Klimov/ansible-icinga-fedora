@@ -132,9 +132,32 @@
         append_privs: yes
         login_unix_socket: /var/lib/mysql/mysql.sock
 
-    - file:
-        path: /etc/icingaweb2/modules/icingadb
+    - dnf:
+        name: icinga-director
+    - mysql_db:
+        name: director
+        state: present
+        login_unix_socket: /var/lib/mysql/mysql.sock
+      register: dbdirector
+    - when: dbdirector.changed
+      mysql_db:
+        name: director
+        state: import
+        target: /usr/share/icingaweb2/modules/director/schema/mysql.sql
+        login_unix_socket: /var/lib/mysql/mysql.sock
+    - mysql_user:
+        name: apache
+        priv: 'director.*:ALL'
+        append_privs: yes
+        login_unix_socket: /var/lib/mysql/mysql.sock
+
+    - loop:
+        - icingadb
+        - director
+      file:
+        path: '/etc/icingaweb2/modules/{{ item }}'
         state: directory
+
     - loop:
         - file: authentication
           cfg: |
@@ -176,6 +199,14 @@
             username = "apache"
             charset = "utf8"
             use_ssl = "0"
+            [director]
+            type = "db"
+            db = "mysql"
+            host = "localhost"
+            dbname = "director"
+            username = "apache"
+            charset = "utf8"
+            use_ssl = "0"
         - file: roles
           cfg: |
             [Administrators]
@@ -206,6 +237,25 @@
             resource = "icingadb"
             [redis1]
             host = "127.0.0.1"
+        - file: modules/director/config
+          cfg: |
+            [db]
+            resource = "director"
+        - file: modules/director/kickstart
+          cfg: |
+            [config]
+            endpoint = "{{ ansible_nodename }}"
+            host = "127.0.0.1"
+            port = "5665"
+            username = "iw2"
+            password = "iw2"
       copy:
         dest: '/etc/icingaweb2/{{ item.file }}.ini'
         content: '{{ item.cfg }}'
+
+    - service:
+        name: icinga-director
+        state: started
+        enabled: yes
+    - when: dbdirector.changed
+      shell: icingacli director kickstart run
