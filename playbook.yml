@@ -22,7 +22,14 @@
         name: icinga2
     - dnf:
         name: icinga2-selinux
-    - shell: icinga2 api setup
+    - shell: >-
+        icinga2 node setup
+        --zone master
+        --listen 0.0.0.0,5665
+        --cn {{ ansible_nodename }}
+        --accept-config
+        --accept-commands
+        --master
       args:
         creates: /var/lib/icinga2/certs/ca.crt
       register: api_setup
